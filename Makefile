@@ -229,14 +229,21 @@ release/include/terra/%.h:  $(LUAJIT_INCLUDE)/%.h $(LUAJIT_LIB)
     
 build/llvm_objects/llvm_list:    $(addprefix build/, $(LIBOBJS) $(EXEOBJS))
 	mkdir -p build/llvm_objects/luajit
-	$(CXX) -o /dev/null $(addprefix build/, $(LIBOBJS) $(EXEOBJS)) $(LLVM_LIBRARY_FLAGS) $(SUPPORT_LIBRARY_FLAGS) $(LFLAGS) -Wl,-t 2>&1 | egrep "lib(LLVM|clang|Polly)"  > build/llvm_objects/llvm_list
-	# extract needed LLVM objects based on a dummy linker invocation
+	# Extract needed LLVM objects based on a dummy linker invocation:
+	# - Older linkers output '(libName.a)object.o' per line, 
+	# - Newer versions output just 'libName.a', unless -t is passed twice.
+	# grep & uniq are used to get just the paths to the static libraries needed.
+	$(CXX) -o /dev/null $(addprefix build/, $(LIBOBJS) $(EXEOBJS)) $(LLVM_LIBRARY_FLAGS) $(SUPPORT_LIBRARY_FLAGS) $(LFLAGS) -Wl,-t 2>&1 \
+		| egrep -o "[^()]*lib(LLVM|clang|Polly).*\.a" \
+		| uniq \
+		> build/llvm_objects/llvm_list
+	# Extract all the static libraries to build/llvm_objects/*
 	cd build/llvm_objects; for lib in $$(cat llvm_list); do \
 		DIR=$$(basename $$lib .a); \
 		mkdir -p $$DIR; \
-		pushd $$DIR; \
+		cd $$DIR; \
 		ar x $$lib; \
-		popd; \
+		cd ..; \
 	done
 	# include all luajit objects, since the entire lua interface is used in terra 
 
